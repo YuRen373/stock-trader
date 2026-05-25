@@ -9,7 +9,7 @@ services:
       - key: OPENSEARCH_HOST
         sync: false
       - key: OPENSEARCH_PORT
-        value: "9200"
+        sync: false
       - key: OPENSEARCH_USER
         sync: false
       - key: OPENSEARCH_PASS
