@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: stock-trader-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: OPENSEARCH_HOST
+        sync: false
+      - key: OPENSEARCH_PORT
+        value: "9200"
+      - key: OPENSEARCH_USER
+        sync: false
+      - key: OPENSEARCH_PASS
+        sync: false
+      - key: OPENSEARCH_SCHEME
+        value: https
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://stock-trader-frontend.onrender.com
+
+  - type: web
+    name: stock-trader-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: BACKEND_URL
+        fromService:
+          name: stock-trader-backend
+          type: web
+          property: hostport
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false

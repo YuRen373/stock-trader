@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 .env
 data/
+node_modules/
+dist/
+tsconfig.tsbuildinfo
+
+# Claude / planning artifacts
+.claude/
+.planning/
+CLAUDE.md
