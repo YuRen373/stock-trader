@@ -14,6 +14,10 @@ import httpx
 import jwt
 import time
 import secrets
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Stock Trader API")
 
@@ -134,31 +138,63 @@ def _get_current_user(request: Request) -> dict:
     except jwt.InvalidTokenError:
         raise HTTPException(401, "Invalid token")
 
+@app.get("/api/health")
+def health_check():
+    """Check backend health and connectivity."""
+    status = {"backend": "ok", "google_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)}
+    try:
+        os_client = get_os()
+        os_client.cluster.health()
+        status["opensearch"] = "ok"
+    except Exception as e:
+        status["opensearch"] = f"error: {e}"
+    return status
+
 @app.post("/api/auth/google")
 async def google_auth(req: GoogleAuthRequest):
+    logger.info(f"Google auth request with redirect_uri: {req.redirect_uri}")
+
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        logger.error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured")
+        raise HTTPException(500, "Google OAuth not configured on server")
+
     # Exchange code for tokens
-    async with httpx.AsyncClient() as client:
-        token_resp = await client.post("https://oauth2.googleapis.com/token", data={
-            "code": req.code,
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": req.redirect_uri,
-            "grant_type": "authorization_code",
-        })
-    if token_resp.status_code != 200:
-        raise HTTPException(400, f"Google token exchange failed: {token_resp.text}")
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post("https://oauth2.googleapis.com/token", data={
+                "code": req.code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": req.redirect_uri,
+                "grant_type": "authorization_code",
+            })
+        if token_resp.status_code != 200:
+            logger.error(f"Google token exchange failed: {token_resp.status_code} {token_resp.text}")
+            raise HTTPException(400, f"Google token exchange failed: {token_resp.text}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during Google token exchange: {e}")
+        raise HTTPException(500, f"Token exchange error: {e}")
 
     tokens = token_resp.json()
     access_token = tokens["access_token"]
 
     # Get user info
-    async with httpx.AsyncClient() as client:
-        user_resp = await client.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-    if user_resp.status_code != 200:
-        raise HTTPException(400, "Failed to get user info from Google")
+    try:
+        async with httpx.AsyncClient() as client:
+            user_resp = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+        if user_resp.status_code != 200:
+            logger.error(f"Google userinfo failed: {user_resp.status_code}")
+            raise HTTPException(400, "Failed to get user info from Google")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching user info: {e}")
+        raise HTTPException(500, f"User info error: {e}")
 
     user_info = user_resp.json()
     user_id = user_info["id"]
@@ -167,11 +203,15 @@ async def google_auth(req: GoogleAuthRequest):
     picture = user_info.get("picture", "")
 
     # Upsert user in OpenSearch
-    os_client = get_os()
-    os_client.index(index=IDX_USERS, id=user_id, body={
-        "email": email, "name": name, "picture": picture,
-        "last_login": datetime.utcnow().isoformat(),
-    }, refresh="wait_for")
+    try:
+        os_client = get_os()
+        os_client.index(index=IDX_USERS, id=user_id, body={
+            "email": email, "name": name, "picture": picture,
+            "last_login": datetime.utcnow().isoformat(),
+        }, refresh="wait_for")
+    except Exception as e:
+        logger.error(f"OpenSearch upsert failed: {e}")
+        raise HTTPException(500, f"Database error: {e}")
 
     # Create JWT
     token = _create_jwt(user_id, email, name, picture)
