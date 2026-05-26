@@ -23,7 +23,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: https://stock-trader-frontend.onrender.com
+        value: https://stock-trader-frontend-6re1.onrender.com
 
   - type: web
     name: stock-trader-frontend
@@ -35,6 +35,6 @@ services:
       - key: PORT
         value: "10000"
       - key: BACKEND_URL
-        value: https://stock-trader-backend.onrender.com
+        value: https://stock-trader-backend-6er4.onrender.com
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
