@@ -35,9 +35,6 @@ services:
       - key: PORT
         value: "10000"
       - key: BACKEND_URL
-        fromService:
-          name: stock-trader-backend
-          type: web
-          property: hostport
+        value: https://stock-trader-backend.onrender.com
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
